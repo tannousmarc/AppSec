@@ -62,26 +62,26 @@ aes_gf28_t sbox(aes_gf28_t a){
          (a >> 6) ^ (a >> 5) ^ (a >> 4);
 }
 
-void aes_enc_exp_step(aes_gf28_t* rk, aes_gf28_t rc){
-  rk[0] = rc ^ sbox(rk[13]) ^ rk[0];
-  rk[1] =      sbox(rk[14]) ^ rk[1];
-  rk[2] =      sbox(rk[15]) ^ rk[2];
-  rk[3] =      sbox(rk[12]) ^ rk[3];
+void aes_enc_exp_step(aes_gf28_t* r, const aes_gf28_t* rk, aes_gf28_t rc){
+  r[0] = rc ^ sbox(rk[13]) ^ rk[0];
+  r[1] =      sbox(rk[14]) ^ rk[1];
+  r[2] =      sbox(rk[15]) ^ rk[2];
+  r[3] =      sbox(rk[12]) ^ rk[3];
 
-  rk[4] =             rk[0] ^ rk[4];
-  rk[5] =             rk[1] ^ rk[5];
-  rk[6] =             rk[2] ^ rk[6];
-  rk[7] =             rk[3] ^ rk[7];
+  r[4] =             r[0] ^ rk[4];
+  r[5] =             r[1] ^ rk[5];
+  r[6] =             r[2] ^ rk[6];
+  r[7] =             r[3] ^ rk[7];
 
-  rk[8] =             rk[4] ^ rk[8];
-  rk[9] =             rk[5] ^ rk[9];
-  rk[10] =           rk[6] ^ rk[10];
-  rk[11] =           rk[7] ^ rk[11];
+  r[8] =             r[4] ^ rk[8];
+  r[9] =             r[5] ^ rk[9];
+  r[10] =           r[6] ^ rk[10];
+  r[11] =           r[7] ^ rk[11];
 
-  rk[12] =           rk[8] ^ rk[12];
-  rk[13] =           rk[9] ^ rk[13];
-  rk[14] =          rk[10] ^ rk[14];
-  rk[15] =          rk[11] ^ rk[15];
+  r[12] =           r[8] ^ rk[12];
+  r[13] =           r[9] ^ rk[13];
+  r[14] =          r[10] ^ rk[14];
+  r[15] =          r[11] ^ rk[15];
 }
 
 void aes_enc_rnd_key(aes_gf28_t* s, const aes_gf28_t* rk){
@@ -139,25 +139,27 @@ void aes_enc_rnd_mix(aes_gf28_t* s){
 }
 
 void aes_enc(uint8_t* r, const uint8_t* m, const uint8_t* k) {
-  aes_gf28_t rk[ 4 * Nb ], s[ 4 * Nb ];
-  aes_gf28_t* rcp = AES_RC;
+  aes_gf28_t rk[ 4 * 4 ], s[ 4 * 4 ];
+  aes_gf28_t rcp[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20 , 0x40, 0x80, 0x1B, 0x36};
   aes_gf28_t* rkp = rk;
-  U8_TO_U8_N(    s, m );
-  U8_TO_U8_N( rkp, k );
+  memcpy(s, m, 16 * sizeof(aes_gf28_t));
+  memcpy(rkp, k, 16 * sizeof(aes_gf28_t));
 
-  for (int i = 1; i < Nr; i++ ){
+  aes_enc_rnd_key( s, rkp );
+
+  for (int i = 1; i < 10; i++ ){
       aes_enc_rnd_sub( s       );
       aes_enc_rnd_row( s       );
       aes_enc_rnd_mix( s       );
-      aes_enc_keyexp_step( rkp, rkp, *(++rcp) );
+      aes_enc_exp_step( rkp, rkp, rcp[i - 1]);
       aes_enc_rnd_key( s, rkp );
     }
 
     aes_enc_rnd_sub( s       );
     aes_enc_rnd_row( s       );
-    aes_enc_keyexp_step( rkp, rkp, *(++rcp) );
+    aes_enc_exp_step( rkp, rkp, rcp[9] );
     aes_enc_rnd_key( s, rkp );
-    U8_TO_U8_N(    r, s );
+    memcpy(r, s, 16 * sizeof(aes_gf28_t));
 }
 
 int main( int argc, char* argv[] ) {
@@ -168,16 +170,22 @@ int main( int argc, char* argv[] ) {
   uint8_t c[ 16 ] = { 0x39, 0x25, 0x84, 0x1D, 0x02, 0xDC, 0x09, 0xFB,
                       0xDC, 0x11, 0x85, 0x97, 0x19, 0x6A, 0x0B, 0x32 };
   uint8_t t[ 16 ];
+  uint8_t result[ 16 ];
+
+  aes_enc(result, m, k);
 
   AES_KEY rk;
-
   AES_set_encrypt_key( k, 128, &rk );
   AES_encrypt( m, t, &rk );
 
-  if( !memcmp( t, c, 16 * sizeof( uint8_t ) ) ) {
-    printf( "AES.Enc( k, m ) == c\n" );
+  for(int i = 0; i < 16; i++){
+    printf("Expected: %3d Received: %3d \n", c[i],result[i]);
+  }
+
+  if( !memcmp( result, c, 16 * sizeof( uint8_t ) ) ) {
+    printf( "Encryption result is equal to c.\n" );
   }
   else {
-    printf( "AES.Enc( k, m ) != c\n" );
+    printf( "Encryption result is not equal to c.\n" );
   }
 }
