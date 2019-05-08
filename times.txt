@@ -1,0 +1,4 @@
+100 samples
+sequentail 180sec
+8 processes 120sec
+16 processes 60sec
